@@ -15,18 +15,23 @@ Future<AnalysisResult> analyze(
   String gpxText, {
   bool reverse = false,
   DateTime? when,
-  void Function(String message)? onProgress,
+  // Reports a human-readable status plus a 0..1 completion fraction so the UI
+  // can show a real progress bar.
+  void Function(String message, double progress)? onProgress,
   // On web some upstreams omit CORS headers; when true the analyzer routes
   // around them (USGS EPQS for elevation, a CORS-enabled Overpass mirror).
   bool web = false,
 }) async {
-  final net = Net(onProgress: onProgress);
-  void log(String m) => onProgress?.call(m);
+  final net = Net();
+  // The nine data sources that fill the progress bar as each one returns.
+  const totalSteps = 9;
+  var doneSteps = 0;
+  void prog(String msg) => onProgress?.call(msg, doneSteps / totalSteps);
   try {
     when ??= DateTime.now();
     final whenDate = DateTime(when.year, when.month, when.day);
 
-    log('Parsing GPX…');
+    prog('Reading route…');
     final gpx = parseGpx(gpxText);
     var pts = gpx.pts;
     if (pts.length < 2) {
@@ -42,14 +47,19 @@ Future<AnalysisResult> analyze(
     final cum = cumulative(pts);
     final totalMi = cum.last / 1609.34;
 
-    // Records any data source that didn't complete so the caller can tell
-    // "no water found" apart from "couldn't finish loading" and offer a retry.
+    // Records any source that didn't complete (kept internal; the UI no longer
+    // surfaces a retry — with no timeouts everything is expected to finish).
     final incomplete = <String>{};
     Future<T> guard<T>(String label, Future<T> f, T fallback) async {
       try {
-        return await f;
+        final r = await f;
+        doneSteps++;
+        prog('Loaded $label');
+        return r;
       } catch (_) {
         incomplete.add(label);
+        doneSteps++;
+        prog('Skipped $label (unavailable)');
         return fallback;
       }
     }
@@ -58,11 +68,11 @@ Future<AnalysisResult> analyze(
     // their own — full bandwidth, no competing with the (large) NRCS station
     // downloads — with aggressive auto-retry inside nhdCrossings. This is what
     // guarantees crossings complete on the first run.
-    log('Finding stream crossings (USGS NHD)…');
+    prog('Finding stream crossings (USGS NHD)…');
     final feats = await guard('stream crossings', nhdCrossings(net, pts, cum), <Feature>[]);
 
     // Then everything else (geometry-only) concurrently.
-    log('Fetching elevation, trail names and conditions…');
+    prog('Fetching elevation, trail names and conditions…');
     final w1 = await Future.wait<Object?>([
       guard('elevation', elevations(net, pts, web: web), <int, int>{}),
       guard('trail names', overpassFeatures(net, pts, web: web), OsmFeatures([], [])),
@@ -135,7 +145,7 @@ Future<AnalysisResult> analyze(
       if (best == null || f.hits > best.hits) best = f;
     }
 
-    log('Done.');
+    onProgress?.call('Done', 1.0);
     return AnalysisResult(
       routeName: gpx.name + (reverse ? ' (Reversed)' : ''),
       direction: reverse ? 'reversed' : 'forward',

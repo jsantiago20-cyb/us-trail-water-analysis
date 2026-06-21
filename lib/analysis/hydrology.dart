@@ -56,7 +56,6 @@ Future<Map<int, int>> elevations(Net net, List<LL> pts,
         final j = await net.getJson(
           'om_elev',
           'https://api.open-meteo.com/v1/elevation?latitude=$lats&longitude=$lons',
-          timeout: const Duration(seconds: 20),
         );
         final el = j['elevation'] as List;
         for (var k = 0; k < part.length && k < el.length; k++) {
@@ -100,7 +99,6 @@ Future<Map<int, int>> elevations(Net net, List<LL> pts,
       final j = await net.getJson(
         'epqs',
         'https://epqs.nationalmap.gov/v1/json?x=$x&y=$y&units=Feet&wkid=4326',
-        timeout: const Duration(seconds: 15),
       );
       final value = j['value'];
       if (value != null) ele[i] = double.parse(value.toString()).round();
@@ -155,12 +153,10 @@ Future<List<Feature>> nhdCrossings(Net net, List<LL> pts, List<double> cum) asyn
     'geometryPrecision': '6',
   };
   final url = '$_nhdUrl?${Uri(queryParameters: params).query}';
-  // Stream crossings are the core of the report, so make this resilient: a short
-  // per-attempt timeout with several automatic retries recovers from a transient
-  // stall on a phone connection without the user ever having to retry by hand.
-  // (The endpoint normally responds in well under 2 s.)
-  final j = await net.getJson('nhd', url,
-      timeout: const Duration(seconds: 20), tries: 5);
+  // Stream crossings are the core of the report. No timeout (so a slow
+  // connection still returns the full data on the first run) plus a few retries
+  // in case the request hard-errors.
+  final j = await net.getJson('nhd', url, tries: 5);
   final feats = (j['features'] as List?) ?? [];
 
   final raw = <_Raw>[];

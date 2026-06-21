@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
@@ -7,9 +5,6 @@ import 'package:share_plus/share_plus.dart';
 import 'analysis/analyzer.dart';
 import 'analysis/models.dart';
 import 'analysis/report.dart';
-
-/// How long to run before offering the user a "keep searching / stop" choice.
-const _slowAfter = Duration(seconds: 60);
 
 class ResultPage extends StatefulWidget {
   final String gpxText;
@@ -32,9 +27,8 @@ class ResultPage extends StatefulWidget {
 class _ResultPageState extends State<ResultPage> {
   AnalysisResult? _result;
   String _progress = 'Starting…';
+  double _fraction = 0; // 0..1 for the progress bar
   String? _error;
-  bool _slow = false; // passed the 60s mark, still running
-  Timer? _slowTimer;
   int _runId = 0; // guards against a stale run resolving after a retry
 
   @override
@@ -43,60 +37,33 @@ class _ResultPageState extends State<ResultPage> {
     _run();
   }
 
-  @override
-  void dispose() {
-    _slowTimer?.cancel();
-    super.dispose();
-  }
-
-  void _armSlowTimer() {
-    _slowTimer?.cancel();
-    _slowTimer = Timer(_slowAfter, () {
-      if (mounted && _result == null && _error == null) {
-        setState(() => _slow = true);
-      }
-    });
-  }
-
   Future<void> _run() async {
     final myRun = ++_runId;
     setState(() {
       _result = null;
       _error = null;
-      _slow = false;
       _progress = 'Starting…';
+      _fraction = 0;
     });
-    _armSlowTimer();
     try {
       final r = await analyze(
         widget.gpxText,
         reverse: widget.reverse,
         when: widget.date,
         web: kIsWeb,
-        onProgress: (m) {
-          if (mounted && myRun == _runId) setState(() => _progress = m);
+        onProgress: (m, f) {
+          if (mounted && myRun == _runId) {
+            setState(() {
+              _progress = m;
+              _fraction = f;
+            });
+          }
         },
       );
-      if (mounted && myRun == _runId) {
-        _slowTimer?.cancel();
-        setState(() {
-          _result = r;
-          _slow = false;
-        });
-      }
+      if (mounted && myRun == _runId) setState(() => _result = r);
     } catch (e) {
-      if (mounted && myRun == _runId) {
-        _slowTimer?.cancel();
-        setState(() => _error = e.toString());
-      }
+      if (mounted && myRun == _runId) setState(() => _error = e.toString());
     }
-  }
-
-  // User chose to keep waiting on the in-flight run: hide the prompt and
-  // re-arm the checkpoint. The analysis keeps running — no data is discarded.
-  void _keepWaiting() {
-    setState(() => _slow = false);
-    _armSlowTimer();
   }
 
   void _share() {
@@ -125,63 +92,52 @@ class _ResultPageState extends State<ResultPage> {
       body: _error != null
           ? _ErrorView(error: _error!, onRetry: _run)
           : _result == null
-              ? _Loading(
-                  progress: _progress,
-                  slow: _slow,
-                  onKeepWaiting: _keepWaiting,
-                  onStop: () => Navigator.of(context).pop(),
-                )
-              : _ResultView(result: _result!, onRetry: _run),
+              ? _Loading(progress: _progress, fraction: _fraction)
+              : _ResultView(result: _result!),
     );
   }
 }
 
 class _Loading extends StatelessWidget {
   final String progress;
-  final bool slow;
-  final VoidCallback onKeepWaiting;
-  final VoidCallback onStop;
-  const _Loading({
-    required this.progress,
-    required this.slow,
-    required this.onKeepWaiting,
-    required this.onStop,
-  });
+  final double fraction;
+  const _Loading({required this.progress, required this.fraction});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final pct = (fraction.clamp(0.0, 1.0) * 100).round();
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 20),
+            Text('$pct%',
+                style: theme.textTheme.headlineMedium
+                    ?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                // 0 fraction shows an indeterminate bar so the user sees motion
+                // before the first source returns; a real value after that.
+                value: fraction <= 0 ? null : fraction.clamp(0.0, 1.0),
+                minHeight: 12,
+                backgroundColor: theme.colorScheme.surfaceContainerHighest,
+              ),
+            ),
+            const SizedBox(height: 16),
             Text(progress,
                 textAlign: TextAlign.center,
                 style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
             Text(
-              slow
-                  ? 'Still searching. A data source is taking longer than a '
-                      'minute — it has not been cut off and is still running.'
-                  : 'Querying USGS, NRCS, OpenStreetMap and NWS in parallel. '
-                      'Usually about 5–15 seconds.',
+              'Querying USGS, NRCS, OpenStreetMap and NWS. No time limit — '
+              'every source runs to completion.',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall,
             ),
-            if (slow) ...[
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: onKeepWaiting,
-                icon: const Icon(Icons.hourglass_bottom),
-                label: const Text('Keep searching'),
-              ),
-              const SizedBox(height: 8),
-              TextButton(onPressed: onStop, child: const Text('Stop')),
-            ],
           ],
         ),
       ),
@@ -224,14 +180,12 @@ class _ErrorView extends StatelessWidget {
 
 class _ResultView extends StatelessWidget {
   final AnalysisResult result;
-  final VoidCallback onRetry;
-  const _ResultView({required this.result, required this.onRetry});
+  const _ResultView({required this.result});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final r = result;
-    final crossingsFailed = r.incompleteSources.contains('stream crossings');
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -245,20 +199,17 @@ class _ResultView extends StatelessWidget {
               ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
         ),
         const SizedBox(height: 16),
-        if (!r.isComplete) _IncompleteBanner(sources: r.incompleteSources, onRetry: onRetry),
         if (r.headline.mostReliable != null) _HeadlineCard(f: r.headline.mostReliable!, dir: r.direction),
         const SizedBox(height: 16),
         Text('Water sources in travel order',
             style: theme.textTheme.titleMedium),
         const SizedBox(height: 8),
         if (r.features.isEmpty)
-          Card(
+          const Card(
             child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(crossingsFailed
-                  ? 'Stream-crossing data did not finish loading. Tap "Retry '
-                      'incomplete data" above to try again.'
-                  : 'No mapped stream crossings were found along this route.'),
+              padding: EdgeInsets.all(16),
+              child: Text(
+                  'No mapped stream crossings were found along this route.'),
             ),
           )
         else
@@ -273,54 +224,6 @@ class _ResultView extends StatelessWidget {
               ?.copyWith(fontStyle: FontStyle.italic),
         ),
       ],
-    );
-  }
-}
-
-class _IncompleteBanner extends StatelessWidget {
-  final List<String> sources;
-  final VoidCallback onRetry;
-  const _IncompleteBanner({required this.sources, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      color: const Color(0xFFFFF3E0),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.cloud_off, color: Color(0xFFE65100), size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text('Some data didn’t finish loading',
-                      style: theme.textTheme.titleSmall
-                          ?.copyWith(fontWeight: FontWeight.w600)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'These sources timed out and aren’t included below: '
-              '${sources.join(', ')}. The results may be incomplete.',
-              style: theme.textTheme.bodySmall,
-            ),
-            const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton.icon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Retry incomplete data'),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

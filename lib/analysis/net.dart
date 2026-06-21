@@ -13,11 +13,6 @@ class Net {
   final Map<String, String> _textCache = {};
   final http.Client _client = http.Client();
 
-  /// Optional callback so the UI can show what the analyzer is doing.
-  final void Function(String message)? onProgress;
-
-  Net({this.onProgress});
-
   void close() => _client.close();
 
   String _key(String tag, String url, String? body) => '$tag|$url|${body ?? ''}';
@@ -27,9 +22,12 @@ class Net {
     String? body,
     Map<String, String>? headers,
     String method = 'GET',
-    Duration timeout = const Duration(seconds: 60),
-    int tries = 2,
+    int tries = 3,
   }) async {
+    // No client-side timeout: a request is allowed to run as long as it needs so
+    // slow connections still return complete data on the first run. Retries only
+    // kick in if a request actually errors out (the browser surfaces a hard
+    // network failure), not because we cut it off.
     Object? last;
     for (var i = 0; i < tries; i++) {
       try {
@@ -37,11 +35,9 @@ class Net {
         final h = headers ?? {'User-Agent': 'gpx-water-analysis'};
         late http.Response resp;
         if (body != null || method == 'POST') {
-          resp = await _client
-              .post(uri, headers: h, body: body)
-              .timeout(timeout);
+          resp = await _client.post(uri, headers: h, body: body);
         } else {
-          resp = await _client.get(uri, headers: h).timeout(timeout);
+          resp = await _client.get(uri, headers: h);
         }
         if (resp.statusCode >= 200 && resp.statusCode < 300) {
           return resp.body;
@@ -51,7 +47,6 @@ class Net {
       } catch (ex) {
         last = ex;
       }
-      // one short backoff on transient throttling; don't sleep after the last try
       if (i < tries - 1) {
         await Future<void>.delayed(const Duration(milliseconds: 800));
       }
@@ -64,8 +59,7 @@ class Net {
     String url, {
     String? body,
     Map<String, String>? headers,
-    Duration timeout = const Duration(seconds: 60),
-    int tries = 2,
+    int tries = 3,
   }) async {
     final key = _key(tag, url, body);
     if (_jsonCache.containsKey(key)) return _jsonCache[key];
@@ -73,7 +67,6 @@ class Net {
         body: body,
         headers: headers,
         method: body != null ? 'POST' : 'GET',
-        timeout: timeout,
         tries: tries);
     final data = jsonDecode(raw);
     _jsonCache[key] = data;
@@ -83,11 +76,11 @@ class Net {
   Future<String> getText(
     String tag,
     String url, {
-    Duration timeout = const Duration(seconds: 60),
+    int tries = 3,
   }) async {
     final key = _key(tag, url, null);
     if (_textCache.containsKey(key)) return _textCache[key]!;
-    final raw = await _fetch(url, timeout: timeout);
+    final raw = await _fetch(url, tries: tries);
     _textCache[key] = raw;
     return raw;
   }
