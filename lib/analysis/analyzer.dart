@@ -23,8 +23,8 @@ Future<AnalysisResult> analyze(
   bool web = false,
 }) async {
   final net = Net();
-  // The nine data sources that fill the progress bar as each one returns.
-  const totalSteps = 9;
+  // The data sources that fill the progress bar as each one returns.
+  const totalSteps = 10;
   var doneSteps = 0;
   void prog(String msg) => onProgress?.call(msg, doneSteps / totalSteps);
   try {
@@ -79,7 +79,8 @@ Future<AnalysisResult> analyze(
       guard('weather', forecast(net, pts), null),
       guard('receiving stream', nldiDownstream(net, pts), (null, <Map<String, String?>>[])),
       guard('snowpack', nrcsSnowpack(net, pts, whenDate), null),
-      guard('drought', drought(net, pts), null),
+      guard('drought', drought(net, pts, whenDate), null),
+      guard('fire-weather alerts', fireAlert(net, pts), null),
     ]);
     final ele = w1[0] as Map<int, int>;
     final osm = w1[1] as OsmFeatures;
@@ -87,6 +88,7 @@ Future<AnalysisResult> analyze(
     final (drainsTo, nldiGages) = w1[3] as (String?, List<Map<String, String?>>);
     final snow = w1[4] as Snowpack?;
     final usdm = w1[5] as String?;
+    final fire = w1[6] as String?;
 
     attachNames(feats, osm);
     for (final f in feats) {
@@ -128,6 +130,7 @@ Future<AnalysisResult> analyze(
       snowpack: snow,
       gage: gage,
       drought: usdm,
+      fireAlert: fire,
       weather: wx,
       dryYear: fcstDry || snowDry || gageDry,
       dryYearBasis: basis,

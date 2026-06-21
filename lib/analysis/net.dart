@@ -32,7 +32,12 @@ class Net {
     for (var i = 0; i < tries; i++) {
       try {
         final uri = Uri.parse(url);
-        final h = headers ?? {'User-Agent': 'gpx-water-analysis'};
+        // IMPORTANT: never set a User-Agent (or any non-"simple" header) by
+        // default. Safari/WebKit sends it as a custom header, which triggers a
+        // CORS preflight that USGS/ArcGIS servers reject, blocking the request;
+        // Chrome silently strips it so the bug is invisible there. Sending no
+        // custom headers keeps these GETs "simple" and lets them through.
+        final h = headers ?? const <String, String>{};
         late http.Response resp;
         if (body != null || method == 'POST') {
           resp = await _client.post(uri, headers: h, body: body);
@@ -43,7 +48,9 @@ class Net {
           return resp.body;
         }
         last = 'HTTP ${resp.statusCode}';
-        if (resp.statusCode == 404) break; // not found won't fix with retry
+        // Client errors (404 not found, 403 blocked, 400 bad request) won't be
+        // fixed by retrying — fail fast so a blocked endpoint degrades quickly.
+        if (resp.statusCode >= 400 && resp.statusCode < 500) break;
       } catch (ex) {
         last = ex;
       }

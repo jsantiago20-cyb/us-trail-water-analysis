@@ -133,7 +133,12 @@ class Weather {
   final int? tempF;
   final int? precipPct;
   final String? state;
-  Weather({required this.summary, required this.tempF, required this.precipPct, required this.state});
+  Weather({
+    required this.summary,
+    required this.tempF,
+    required this.precipPct,
+    required this.state,
+  });
   Map<String, dynamic> toJson() => {
         'summary': summary,
         'temp_f': tempF,
@@ -148,6 +153,7 @@ class Conditions {
   Snowpack? snowpack;
   Gage? gage;
   String? drought;
+  String? fireAlert; // active Red Flag Warning / Fire Weather Watch, else null
   Weather? weather;
   bool dryYear;
   String? dryYearBasis;
@@ -160,6 +166,7 @@ class Conditions {
     this.snowpack,
     this.gage,
     this.drought,
+    this.fireAlert,
     this.weather,
     required this.dryYear,
     this.dryYearBasis,
@@ -173,6 +180,7 @@ class Conditions {
         'snowpack': snowpack?.toJson(),
         'gage': gage?.toJson(),
         'drought': drought,
+        'fire_alert': fireAlert,
         'weather': weather?.toJson(),
         'dry_year': dryYear,
         'dry_year_basis': dryYearBasis,

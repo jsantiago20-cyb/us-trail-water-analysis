@@ -261,16 +261,112 @@ Future<Snowpack?> nrcsSnowpack(Net net, List<LL> pts, DateTime when) async {
       stations: samples, pctMedian: avg, april1: april1, nearest: samples.first.name);
 }
 
-Future<String?> drought(Net net, List<LL> pts) async {
+/// US Drought Monitor category labels (D0..D4).
+const _droughtCats = {
+  0: 'D0 (Abnormally Dry)',
+  1: 'D1 (Moderate Drought)',
+  2: 'D2 (Severe Drought)',
+  3: 'D3 (Extreme Drought)',
+  4: 'D4 (Exceptional Drought)',
+};
+
+String _ymd(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+/// Current US Drought Monitor stage for the COUNTY the route starts in.
+///
+/// The previous ArcGIS service was dead (returned nothing even for known
+/// drought areas). This uses the authoritative path: FCC area API → county FIPS,
+/// then the official USDM data service (usdmdataservices.unl.edu) for that
+/// county. Returns something like "Jefferson County, CO — D2 (Severe Drought);
+/// locally up to D3 (Extreme) in 8% of county", or null if the lookup fails.
+Future<String?> drought(Net net, List<LL> pts, DateTime when) async {
   final lat = pts.first.lat, lon = pts.first.lon;
-  final u =
-      'https://services1.arcgis.com/Hp6G80Pky0om7QvQ/arcgis/rest/services/USDM_current/'
-      'FeatureServer/0/query?f=json&where=1%3D1&outFields=dm&geometry=$lon,$lat'
-      '&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects';
+
+  String? fips, county, stateCode;
   try {
-    final j = await net.getJson('usdm', u);
-    final fs = (j['features'] as List?) ?? [];
-    return fs.isNotEmpty ? 'D${fs[0]['attributes']['dm']}' : 'none';
+    final j = await net.getJson(
+        'fcc', 'https://geo.fcc.gov/api/census/area?lat=$lat&lon=$lon&format=json');
+    final res = (j['results'] as List?) ?? [];
+    if (res.isNotEmpty) {
+      fips = res[0]['county_fips'] as String?;
+      county = res[0]['county_name'] as String?;
+      stateCode = res[0]['state_code'] as String?;
+    }
+  } catch (_) {/* fall through */}
+  if (fips == null) return null;
+
+  final start = _ymd(when.subtract(const Duration(days: 28)));
+  final end = _ymd(when);
+  String csv;
+  try {
+    csv = await net.getText(
+        'usdm',
+        'https://usdmdataservices.unl.edu/api/CountyStatistics/'
+            'GetDroughtSeverityStatisticsByAreaPercent'
+            '?aoi=$fips&startdate=$start&enddate=$end&statisticsType=1');
+  } catch (_) {
+    return null;
+  }
+
+  final place = county != null ? '$county, $stateCode' : 'county';
+  final lines =
+      csv.trim().split('\n').where((l) => l.trim().isNotEmpty).toList();
+  if (lines.length < 2) return '$place — None (no drought)';
+
+  final header = lines.first.split(',').map((h) => h.trim()).toList();
+  final col = {for (var i = 0; i < header.length; i++) header[i]: i};
+  final rows = lines.skip(1).map((l) => l.split(',')).toList()
+    ..sort((a, b) => b[col['MapDate']!].compareTo(a[col['MapDate']!])); // newest
+  final r = rows.first;
+  double pc(String name) {
+    final i = col[name];
+    if (i == null || i >= r.length) return 0;
+    return double.tryParse(r[i].trim()) ?? 0;
+  }
+
+  // Percentages are cumulative (D0 includes all worse). The county's stage is
+  // the most severe category covering a majority; also note the worst present.
+  final pct = {for (var i = 0; i <= 4; i++) i: pc('D$i')};
+  int? predominant;
+  for (var i = 4; i >= 0; i--) {
+    if (pct[i]! >= 50) {
+      predominant = i;
+      break;
+    }
+  }
+  int? worst;
+  for (var i = 4; i >= 0; i--) {
+    if (pct[i]! > 0) {
+      worst = i;
+      break;
+    }
+  }
+  if (predominant == null && worst == null) return '$place — None (no drought)';
+  final main = predominant ?? worst!;
+  var label = '$place — ${_droughtCats[main]}';
+  if (worst != null && worst > main && pct[worst]! >= 1) {
+    label +=
+        '; locally up to ${_droughtCats[worst]} in ${pct[worst]!.round()}% of county';
+  }
+  return label;
+}
+
+/// Active NWS fire-weather alert at the start point (Red Flag Warning or Fire
+/// Weather Watch), or null if there is none. This is the authoritative
+/// high-fire-danger signal.
+Future<String?> fireAlert(Net net, List<LL> pts) async {
+  final lat = pts.first.lat, lon = pts.first.lon;
+  try {
+    final j = await net.getJson(
+        'alerts', 'https://api.weather.gov/alerts/active?point=$lat,$lon');
+    final feats = (j['features'] as List?) ?? [];
+    for (final f in feats) {
+      final ev = (f['properties']?['event'] ?? '').toString();
+      final l = ev.toLowerCase();
+      if (l.contains('red flag') || l.contains('fire weather')) return ev;
+    }
+    return null;
   } catch (_) {
     return null;
   }
@@ -278,13 +374,12 @@ Future<String?> drought(Net net, List<LL> pts) async {
 
 Future<Weather?> forecast(Net net, List<LL> pts) async {
   final lat = pts.first.lat, lon = pts.first.lon;
-  final hdr = {'User-Agent': 'gpx-water-analysis (contact: user)'};
   try {
-    final p = await net.getJson('nwspoint',
-        'https://api.weather.gov/points/$lat,$lon', headers: hdr);
-    final state =
-        p['properties']['relativeLocation']['properties']['state'] as String?;
-    final fc = await net.getJson('nwsfc', p['properties']['forecast'], headers: hdr);
+    final p =
+        await net.getJson('nwspoint', 'https://api.weather.gov/points/$lat,$lon');
+    final props = p['properties'];
+    final state = props['relativeLocation']['properties']['state'] as String?;
+    final fc = await net.getJson('nwsfc', props['forecast']);
     final per = fc['properties']['periods'][0];
     return Weather(
       summary: per['shortForecast'] as String,

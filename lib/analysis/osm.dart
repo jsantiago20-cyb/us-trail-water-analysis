@@ -52,7 +52,6 @@ Future<OsmFeatures> overpassFeatures(Net net, List<LL> pts,
         body: body,
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'gpx-water-analysis',
         },
       );
       break;

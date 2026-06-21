@@ -354,6 +354,42 @@ class _FeatureTile extends StatelessWidget {
   }
 }
 
+class _FireBanner extends StatelessWidget {
+  final String alert;
+  const _FireBanner({required this.alert});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      color: const Color(0xFFD32F2F),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            const Icon(Icons.local_fire_department, color: Colors.white, size: 28),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('High fire danger',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                          color: Colors.white, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 2),
+                  Text('$alert in effect (NWS).',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: Colors.white)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ConditionsCard extends StatelessWidget {
   final Conditions c;
   const _ConditionsCard({required this.c});
@@ -379,7 +415,10 @@ class _ConditionsCard extends StatelessWidget {
       lines.add('Connected gage: ${g.name} #${g.id} at ${g.cfs} cfs '
           '(≈${g.pctOfMedian ?? '?'}% of day median).');
     }
-    lines.add('US Drought Monitor at start: ${c.drought ?? 'unknown'}.');
+    lines.add('US Drought Monitor — ${c.drought ?? 'unknown'}.');
+    lines.add(c.fireAlert != null
+        ? 'Fire weather: ${c.fireAlert} in effect (NWS).'
+        : 'Fire weather: no active warnings (NWS).');
     final w = c.weather;
     if (w != null) {
       lines.add('NWS forecast: ${w.summary}, ${w.tempF}°F, precip ${w.precipPct}%.');
@@ -387,7 +426,11 @@ class _ConditionsCard extends StatelessWidget {
     lines.add('Dry-year flag: ${c.dryYear}'
         '${c.dryYearBasis != null ? ' (basis: ${c.dryYearBasis})' : ''}.');
 
-    return Card(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (c.fireAlert != null) _FireBanner(alert: c.fireAlert!),
+        Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -411,6 +454,8 @@ class _ConditionsCard extends StatelessWidget {
           ],
         ),
       ),
+        ),
+      ],
     );
   }
 }

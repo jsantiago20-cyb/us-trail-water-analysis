@@ -51,8 +51,11 @@ String renderMarkdown(AnalysisResult r) {
         '(as of ${g.asOf.length >= 16 ? g.asOf.substring(0, 16) : g.asOf}); '
         'day median p50≈${st['p50'] ?? '?'} cfs, ≈${g.pctOfMedian ?? '?'}% of median.');
   }
-  out.add('- US Drought Monitor at start: ${c.drought}.');
   final w = c.weather;
+  out.add('- US Drought Monitor — ${c.drought}.');
+  if (c.fireAlert != null) {
+    out.add('- HIGH FIRE DANGER: ${c.fireAlert} in effect (NWS).');
+  }
   if (w != null) {
     out.add('- NWS forecast: ${w.summary}, ${w.tempF}F, precip ${w.precipPct}%.');
   }
