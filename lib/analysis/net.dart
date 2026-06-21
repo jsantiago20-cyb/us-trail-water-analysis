@@ -27,7 +27,7 @@ class Net {
     String? body,
     Map<String, String>? headers,
     String method = 'GET',
-    Duration timeout = const Duration(seconds: 25),
+    Duration timeout = const Duration(seconds: 40),
     int tries = 2,
   }) async {
     Object? last;
@@ -64,7 +64,7 @@ class Net {
     String url, {
     String? body,
     Map<String, String>? headers,
-    Duration timeout = const Duration(seconds: 25),
+    Duration timeout = const Duration(seconds: 40),
   }) async {
     final key = _key(tag, url, body);
     if (_jsonCache.containsKey(key)) return _jsonCache[key];
@@ -81,7 +81,7 @@ class Net {
   Future<String> getText(
     String tag,
     String url, {
-    Duration timeout = const Duration(seconds: 25),
+    Duration timeout = const Duration(seconds: 40),
   }) async {
     final key = _key(tag, url, null);
     if (_textCache.containsKey(key)) return _textCache[key]!;

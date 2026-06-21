@@ -147,9 +147,15 @@ Future<List<Feature>> nhdCrossings(Net net, List<LL> pts, List<double> cum) asyn
     'where': '1=1',
     'outFields': 'gnis_name,fcode,ftype',
     'returnGeometry': 'true',
+    // Generalize the returned geometry: ~5.5 m tolerance and 6-decimal
+    // coordinates. This is plenty precise to detect a route crossing a stream
+    // but shrinks the payload ~7x (≈160 KB -> ≈24 KB) and the on-device
+    // intersection math accordingly — critical on a phone connection.
+    'maxAllowableOffset': '0.00005',
+    'geometryPrecision': '6',
   };
   final url = '$_nhdUrl?${Uri(queryParameters: params).query}';
-  final j = await net.getJson('nhd', url);
+  final j = await net.getJson('nhd', url, timeout: const Duration(seconds: 45));
   final feats = (j['features'] as List?) ?? [];
 
   final raw = <_Raw>[];
