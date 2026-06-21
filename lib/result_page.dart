@@ -107,8 +107,8 @@ class _Loading extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 40),
             child: Text(
-              'Querying USGS, NRCS, OpenStreetMap and NWS. This can take up to a '
-              'minute on a long route.',
+              'Querying USGS, NRCS, OpenStreetMap and NWS in parallel. '
+              'Usually about 5–15 seconds.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall,
             ),

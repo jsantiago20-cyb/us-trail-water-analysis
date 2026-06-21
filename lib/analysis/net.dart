@@ -27,8 +27,8 @@ class Net {
     String? body,
     Map<String, String>? headers,
     String method = 'GET',
-    Duration timeout = const Duration(seconds: 90),
-    int tries = 4,
+    Duration timeout = const Duration(seconds: 25),
+    int tries = 2,
   }) async {
     Object? last;
     for (var i = 0; i < tries; i++) {
@@ -51,8 +51,10 @@ class Net {
       } catch (ex) {
         last = ex;
       }
-      // backoff on transient throttling
-      await Future<void>.delayed(Duration(seconds: 2 * (i + 1)));
+      // one short backoff on transient throttling; don't sleep after the last try
+      if (i < tries - 1) {
+        await Future<void>.delayed(const Duration(milliseconds: 800));
+      }
     }
     throw Exception('fetch failed for $url: $last');
   }
@@ -62,7 +64,7 @@ class Net {
     String url, {
     String? body,
     Map<String, String>? headers,
-    Duration timeout = const Duration(seconds: 90),
+    Duration timeout = const Duration(seconds: 25),
   }) async {
     final key = _key(tag, url, body);
     if (_jsonCache.containsKey(key)) return _jsonCache[key];
@@ -79,7 +81,7 @@ class Net {
   Future<String> getText(
     String tag,
     String url, {
-    Duration timeout = const Duration(seconds: 60),
+    Duration timeout = const Duration(seconds: 25),
   }) async {
     final key = _key(tag, url, null);
     if (_textCache.containsKey(key)) return _textCache[key]!;

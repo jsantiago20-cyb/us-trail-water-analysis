@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'geometry.dart';
 import 'models.dart';
 import 'net.dart';
@@ -24,26 +25,50 @@ const permRank = <String, int>{
 const _nhdUrl =
     'https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer/6/query';
 
-/// Fill elevations along the route. Tries open-elevation's batch endpoint, then
-/// falls back to USGS 3DEP EPQS per point. Returns a sparse {routeIndex: feet}.
+/// Fill elevations along the route. Returns a sparse {routeIndex: feet}.
 ///
-/// On web, open-elevation does not send CORS headers, so we skip it and use
-/// EPQS (which does) directly — capping the sample count so a long route
-/// doesn't fan out into hundreds of per-point requests.
+/// Primary source is Open-Meteo's elevation API: it is CORS-enabled (works in
+/// the browser), batches up to 100 points per request, and returns in one round
+/// trip — so a whole route is one or two fast calls instead of dozens. Falls
+/// back to open-elevation (native only) and then to USGS 3DEP EPQS (parallel).
 Future<Map<int, int>> elevations(Net net, List<LL> pts,
-    {int step = 12, bool web = false}) async {
+    {int step = 12, bool web = false, int maxSamples = 100}) async {
+  // Cap the number of sampled points so the batch stays within the API limit
+  // and a very long route never explodes into many requests.
   var s = step;
-  if (web) {
-    const maxSamples = 40;
-    if (pts.length / step > maxSamples) s = (pts.length / maxSamples).ceil();
-  }
+  if (pts.length / s > maxSamples) s = (pts.length / maxSamples).ceil();
   final idx = <int>[];
   for (var i = 0; i < pts.length; i += s) {
     idx.add(i);
   }
   if (idx.isEmpty || idx.last != pts.length - 1) idx.add(pts.length - 1);
 
-  // batch via open-elevation (native platforms only — no CORS on web)
+  // Primary: Open-Meteo batch elevation (CORS-ok, <=100 pts/call, meters).
+  try {
+    final out = <int, int>{};
+    const chunk = 100;
+    final calls = <Future<void>>[];
+    for (var c = 0; c < idx.length; c += chunk) {
+      final part = idx.sublist(c, math.min(c + chunk, idx.length));
+      final lats = part.map((i) => pts[i].lat).join(',');
+      final lons = part.map((i) => pts[i].lon).join(',');
+      calls.add(() async {
+        final j = await net.getJson(
+          'om_elev',
+          'https://api.open-meteo.com/v1/elevation?latitude=$lats&longitude=$lons',
+          timeout: const Duration(seconds: 20),
+        );
+        final el = j['elevation'] as List;
+        for (var k = 0; k < part.length && k < el.length; k++) {
+          out[part[k]] = ((el[k] as num).toDouble() * 3.281).round();
+        }
+      }());
+    }
+    await Future.wait(calls);
+    if (out.isNotEmpty) return out;
+  } catch (_) {/* fall through */}
+
+  // Fallback A (native only — no CORS on web): open-elevation batch.
   if (!web) {
     try {
       final body = jsonEncode({
@@ -67,20 +92,20 @@ Future<Map<int, int>> elevations(Net net, List<LL> pts,
     } catch (_) {/* fall through */}
   }
 
-  // fallback: USGS 3DEP EPQS, per point
+  // Fallback B: USGS 3DEP EPQS, per point but issued in parallel.
   final ele = <int, int>{};
-  for (final i in idx) {
+  await Future.wait(idx.map((i) async {
     final x = pts[i].lon, y = pts[i].lat;
-    final url =
-        'https://epqs.nationalmap.gov/v1/json?x=$x&y=$y&units=Feet&wkid=4326';
     try {
-      final j = await net.getJson('epqs', url, timeout: const Duration(seconds: 30));
-      final v = j['value'];
-      if (v != null) ele[i] = double.parse(v.toString()).round();
-    } catch (_) {
-      continue;
-    }
-  }
+      final j = await net.getJson(
+        'epqs',
+        'https://epqs.nationalmap.gov/v1/json?x=$x&y=$y&units=Feet&wkid=4326',
+        timeout: const Duration(seconds: 15),
+      );
+      final value = j['value'];
+      if (value != null) ele[i] = double.parse(value.toString()).round();
+    } catch (_) {/* skip this point */}
+  }));
   return ele;
 }
 
