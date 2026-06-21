@@ -1,0 +1,55 @@
+# Codemagic CI/CD — builds the iOS app on a cloud macOS machine and ships it to
+# TestFlight. No Mac or Xcode required on your side.
+#
+# Prerequisites (one-time, all in the Codemagic UI — see README_TESTFLIGHT.md):
+#   1. Connect this Git repository to a Codemagic app.
+#   2. Add an App Store Connect API key integration named exactly: app_store_key
+#   3. The bundle id below must match the one in App Store Connect.
+#
+# Then just push to your default branch (or press "Start new build").
+
+workflows:
+  ios-testflight:
+    name: iOS · US Trail Water Analysis · TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: app_store_key
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.ustrailwater.usTrailWaterAnalysis
+    scripts:
+      - name: Set up code signing
+        script: |
+          xcode-project use-profiles
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+      - name: Install CocoaPods dependencies
+        script: |
+          find . -name "Podfile" -execdir pod install \;
+      - name: Flutter analyze
+        script: |
+          flutter analyze
+      - name: Build signed IPA
+        script: |
+          # $BUILD_NUMBER is Codemagic's per-workflow counter — always unique and
+          # monotonic, so every TestFlight upload gets a fresh build number.
+          flutter build ipa --release \
+            --build-name=1.0.0 \
+            --build-number=$BUILD_NUMBER \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - flutter_drive.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        # Uncomment to auto-add builds to a TestFlight tester group:
+        # beta_groups:
+        #   - Internal Testers

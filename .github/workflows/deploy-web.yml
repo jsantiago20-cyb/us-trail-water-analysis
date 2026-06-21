@@ -1,0 +1,49 @@
+name: Deploy web app to GitHub Pages
+
+# Builds the Flutter web app and publishes it to GitHub Pages on every push to
+# main. The base-href is derived from the repo name automatically, so the PWA
+# works at https://<you>.github.io/<repo>/ no matter what you name the repo.
+#
+# One-time setup after the first push:
+#   Repo → Settings → Pages → Build and deployment → Source = "GitHub Actions"
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: Build web (base-href from repo name)
+        run: |
+          REPO_NAME="${GITHUB_REPOSITORY#*/}"
+          flutter build web --release --base-href "/$REPO_NAME/"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

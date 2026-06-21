@@ -1,0 +1,90 @@
+// Runs the full analyzer in a real browser (flutter test --platform chrome)
+// against the live USGS/NRCS/OSM/NWS APIs, proving every endpoint works over
+// CORS exactly as the deployed PWA will.
+@TestOn("browser")
+library;
+
+import "package:flutter_test/flutter_test.dart";
+import "package:us_trail_water_analysis/analysis/analyzer.dart";
+
+const demoGpx = r"""<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="US Trail Water Analysis" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>Reynolds Park Demo Loop</name>
+    <trkseg>
+      <trkpt lat="39.404" lon="-105.2615"></trkpt>
+      <trkpt lat="39.405178" lon="-105.261025"></trkpt>
+      <trkpt lat="39.406435" lon="-105.26085"></trkpt>
+      <trkpt lat="39.407697" lon="-105.261057"></trkpt>
+      <trkpt lat="39.408875" lon="-105.261675"></trkpt>
+      <trkpt lat="39.409881" lon="-105.262674"></trkpt>
+      <trkpt lat="39.410652" lon="-105.263972"></trkpt>
+      <trkpt lat="39.411162" lon="-105.265454"></trkpt>
+      <trkpt lat="39.41143" lon="-105.267"></trkpt>
+      <trkpt lat="39.411513" lon="-105.26851"></trkpt>
+      <trkpt lat="39.411489" lon="-105.269928"></trkpt>
+      <trkpt lat="39.411435" lon="-105.271245"></trkpt>
+      <trkpt lat="39.41141" lon="-105.2725"></trkpt>
+      <trkpt lat="39.411435" lon="-105.273755"></trkpt>
+      <trkpt lat="39.411489" lon="-105.275072"></trkpt>
+      <trkpt lat="39.411513" lon="-105.27649"></trkpt>
+      <trkpt lat="39.41143" lon="-105.278"></trkpt>
+      <trkpt lat="39.411162" lon="-105.279546"></trkpt>
+      <trkpt lat="39.410652" lon="-105.281028"></trkpt>
+      <trkpt lat="39.409881" lon="-105.282326"></trkpt>
+      <trkpt lat="39.408875" lon="-105.283325"></trkpt>
+      <trkpt lat="39.407697" lon="-105.283943"></trkpt>
+      <trkpt lat="39.406435" lon="-105.28415"></trkpt>
+      <trkpt lat="39.405178" lon="-105.283975"></trkpt>
+      <trkpt lat="39.404" lon="-105.2835"></trkpt>
+      <trkpt lat="39.402939" lon="-105.282837"></trkpt>
+      <trkpt lat="39.401993" lon="-105.282101"></trkpt>
+      <trkpt lat="39.40113" lon="-105.281382"></trkpt>
+      <trkpt lat="39.400295" lon="-105.280727"></trkpt>
+      <trkpt lat="39.399435" lon="-105.280127"></trkpt>
+      <trkpt lat="39.398518" lon="-105.279528"></trkpt>
+      <trkpt lat="39.397548" lon="-105.278847"></trkpt>
+      <trkpt lat="39.39657" lon="-105.278"></trkpt>
+      <trkpt lat="39.395659" lon="-105.276929"></trkpt>
+      <trkpt lat="39.394913" lon="-105.275622"></trkpt>
+      <trkpt lat="39.394422" lon="-105.274117"></trkpt>
+      <trkpt lat="39.39425" lon="-105.2725"></trkpt>
+      <trkpt lat="39.394422" lon="-105.270883"></trkpt>
+      <trkpt lat="39.394913" lon="-105.269378"></trkpt>
+      <trkpt lat="39.395659" lon="-105.268071"></trkpt>
+      <trkpt lat="39.39657" lon="-105.267"></trkpt>
+      <trkpt lat="39.397548" lon="-105.266153"></trkpt>
+      <trkpt lat="39.398518" lon="-105.265472"></trkpt>
+      <trkpt lat="39.399435" lon="-105.264873"></trkpt>
+      <trkpt lat="39.400295" lon="-105.264273"></trkpt>
+      <trkpt lat="39.40113" lon="-105.263618"></trkpt>
+      <trkpt lat="39.401993" lon="-105.262899"></trkpt>
+      <trkpt lat="39.402939" lon="-105.262163"></trkpt>
+      <trkpt lat="39.404" lon="-105.2615"></trkpt>
+    </trkseg>
+  </trk>
+</gpx>
+""";
+
+void main() {
+  test("all live data APIs work from the browser (CORS)", () async {
+    final r = await analyze(demoGpx, reverse: true,
+        when: DateTime(2026, 6, 21), web: true);
+
+    // USGS NHD stream crossings
+    expect(r.totalDistanceMi, greaterThan(0));
+    expect(r.features, isNotEmpty, reason: "NHD crossings");
+    // USGS EPQS elevation (the web elevation path)
+    expect(r.features.any((f) => f.elevFt != null), isTrue, reason: "EPQS elevation");
+    // USGS NLDI receiving stream
+    expect(r.conditions.drainsTo, isNotNull, reason: "NLDI");
+    // NRCS Apr-Jul water-supply forecast
+    expect(r.conditions.runoffForecast, isNotNull, reason: "NRCS forecast");
+    // NWS forecast
+    expect(r.conditions.weather, isNotNull, reason: "NWS");
+    // US Drought Monitor
+    expect(r.conditions.drought, isNotNull, reason: "USDM");
+    // dry-year flag computed end-to-end
+    expect(r.conditions.dryYear, isTrue, reason: "dry-year signal");
+  }, timeout: const Timeout(Duration(minutes: 4)));
+}
