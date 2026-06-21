@@ -131,13 +131,6 @@ class _Loading extends StatelessWidget {
             Text(progress,
                 textAlign: TextAlign.center,
                 style: theme.textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(
-              'Querying USGS, NRCS, OpenStreetMap and NWS. No time limit — '
-              'every source runs to completion.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall,
-            ),
           ],
         ),
       ),
@@ -216,13 +209,6 @@ class _ResultView extends StatelessWidget {
           ...r.features.map((f) => _FeatureTile(f: f)),
         const SizedBox(height: 16),
         _ConditionsCard(c: r.conditions),
-        const SizedBox(height: 16),
-        Text(
-          'Small foothills/backcountry streams are not potable without '
-          'treatment. This judges presence of flow, not water quality.',
-          style: theme.textTheme.bodySmall
-              ?.copyWith(fontStyle: FontStyle.italic),
-        ),
       ],
     );
   }

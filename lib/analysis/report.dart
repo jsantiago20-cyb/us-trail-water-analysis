@@ -61,7 +61,5 @@ String renderMarkdown(AnalysisResult r) {
   }
   out.add('- Dry-year flag: ${c.dryYear} (basis: ${c.dryYearBasis}; '
       'downgrades intermittent and ephemeral draws).');
-  out.add('\nSmall foothills/backcountry streams are not potable without treatment. '
-      'This judges presence of flow, not water quality.');
   return out.join('\n');
 }

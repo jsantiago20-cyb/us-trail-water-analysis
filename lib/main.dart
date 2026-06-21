@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
 
 import 'result_page.dart';
 
@@ -57,14 +56,6 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  Future<void> _loadDemo() async {
-    final txt = await rootBundle.loadString('assets/demo/reynolds-demo.gpx');
-    setState(() {
-      _gpxText = txt;
-      _fileName = 'reynolds-demo.gpx (bundled)';
-    });
-  }
-
   Future<void> _pickDate() async {
     final d = await showDatePicker(
       context: context,
@@ -82,7 +73,7 @@ class _HomePageState extends State<HomePage> {
 
   void _run() {
     if (_gpxText == null) {
-      _toast('Choose a GPX file or load the demo route first.');
+      _toast('Choose a GPX file first.');
       return;
     }
     Navigator.of(context).push(MaterialPageRoute(
@@ -108,8 +99,6 @@ class _HomePageState extends State<HomePage> {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          const _Intro(),
-          const SizedBox(height: 20),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -118,22 +107,13 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   Text('Route', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: _pickFile,
-                          icon: const Icon(Icons.upload_file),
-                          label: const Text('Choose GPX file'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      OutlinedButton.icon(
-                        onPressed: _loadDemo,
-                        icon: const Icon(Icons.terrain),
-                        label: const Text('Demo'),
-                      ),
-                    ],
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _pickFile,
+                      icon: const Icon(Icons.upload_file),
+                      label: const Text('Choose GPX file'),
+                    ),
                   ),
                   if (hasFile) ...[
                     const SizedBox(height: 12),
@@ -187,40 +167,8 @@ class _HomePageState extends State<HomePage> {
             icon: const Icon(Icons.water_drop),
             label: const Text('Analyze water sources'),
           ),
-          const SizedBox(height: 16),
-          Text(
-            'Uses free, keyless USGS, NRCS, OpenStreetMap, and NWS data. '
-            'A connection is required while analyzing.',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            textAlign: TextAlign.center,
-          ),
         ],
       ),
-    );
-  }
-}
-
-class _Intro extends StatelessWidget {
-  const _Intro();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Find water on any US trail',
-            style: theme.textTheme.headlineSmall
-                ?.copyWith(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        Text(
-          'Load a GPX route and get every water crossing by trail and mile, '
-          'with a flowing-or-dry call grounded in current snowpack, '
-          'streamflow, and drought conditions.',
-          style: theme.textTheme.bodyMedium,
-        ),
-      ],
     );
   }
 }
