@@ -155,7 +155,12 @@ Future<List<Feature>> nhdCrossings(Net net, List<LL> pts, List<double> cum) asyn
     'geometryPrecision': '6',
   };
   final url = '$_nhdUrl?${Uri(queryParameters: params).query}';
-  final j = await net.getJson('nhd', url, timeout: const Duration(seconds: 60));
+  // Stream crossings are the core of the report, so make this resilient: a short
+  // per-attempt timeout with several automatic retries recovers from a transient
+  // stall on a phone connection without the user ever having to retry by hand.
+  // (The endpoint normally responds in well under 2 s.)
+  final j = await net.getJson('nhd', url,
+      timeout: const Duration(seconds: 20), tries: 5);
   final feats = (j['features'] as List?) ?? [];
 
   final raw = <_Raw>[];

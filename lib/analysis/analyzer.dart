@@ -54,12 +54,17 @@ Future<AnalysisResult> analyze(
       }
     }
 
-    // Wave 1: every call that only needs the route geometry runs concurrently
-    // instead of one after another.
-    log('Fetching map data, elevation and conditions…');
+    // Stream crossings are the heart of the report, so fetch them FIRST and on
+    // their own — full bandwidth, no competing with the (large) NRCS station
+    // downloads — with aggressive auto-retry inside nhdCrossings. This is what
+    // guarantees crossings complete on the first run.
+    log('Finding stream crossings (USGS NHD)…');
+    final feats = await guard('stream crossings', nhdCrossings(net, pts, cum), <Feature>[]);
+
+    // Then everything else (geometry-only) concurrently.
+    log('Fetching elevation, trail names and conditions…');
     final w1 = await Future.wait<Object?>([
       guard('elevation', elevations(net, pts, web: web), <int, int>{}),
-      guard('stream crossings', nhdCrossings(net, pts, cum), <Feature>[]),
       guard('trail names', overpassFeatures(net, pts, web: web), OsmFeatures([], [])),
       guard('weather', forecast(net, pts), null),
       guard('receiving stream', nldiDownstream(net, pts), (null, <Map<String, String?>>[])),
@@ -67,12 +72,11 @@ Future<AnalysisResult> analyze(
       guard('drought', drought(net, pts), null),
     ]);
     final ele = w1[0] as Map<int, int>;
-    final feats = w1[1] as List<Feature>;
-    final osm = w1[2] as OsmFeatures;
-    final wx = w1[3] as Weather?;
-    final (drainsTo, nldiGages) = w1[4] as (String?, List<Map<String, String?>>);
-    final snow = w1[5] as Snowpack?;
-    final usdm = w1[6] as String?;
+    final osm = w1[1] as OsmFeatures;
+    final wx = w1[2] as Weather?;
+    final (drainsTo, nldiGages) = w1[3] as (String?, List<Map<String, String?>>);
+    final snow = w1[4] as Snowpack?;
+    final usdm = w1[5] as String?;
 
     attachNames(feats, osm);
     for (final f in feats) {

@@ -65,6 +65,7 @@ class Net {
     String? body,
     Map<String, String>? headers,
     Duration timeout = const Duration(seconds: 60),
+    int tries = 2,
   }) async {
     final key = _key(tag, url, body);
     if (_jsonCache.containsKey(key)) return _jsonCache[key];
@@ -72,7 +73,8 @@ class Net {
         body: body,
         headers: headers,
         method: body != null ? 'POST' : 'GET',
-        timeout: timeout);
+        timeout: timeout,
+        tries: tries);
     final data = jsonDecode(raw);
     _jsonCache[key] = data;
     return data;
