@@ -197,6 +197,12 @@ class AnalysisResult {
   final Conditions conditions;
   final String? reversedGpx;
 
+  /// Human-readable names of data sources that did not complete (timed out or
+  /// errored) during this run. Empty when every source returned. Lets the UI
+  /// distinguish "no water found" from "couldn't finish loading" and offer a
+  /// retry instead of presenting incomplete data as final.
+  final List<String> incompleteSources;
+
   AnalysisResult({
     required this.routeName,
     required this.direction,
@@ -207,7 +213,10 @@ class AnalysisResult {
     required this.features,
     required this.conditions,
     required this.reversedGpx,
+    this.incompleteSources = const [],
   });
+
+  bool get isComplete => incompleteSources.isEmpty;
 
   Map<String, dynamic> toJson() => {
         'route': {

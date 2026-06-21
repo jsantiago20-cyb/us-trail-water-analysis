@@ -42,18 +42,29 @@ Future<AnalysisResult> analyze(
     final cum = cumulative(pts);
     final totalMi = cum.last / 1609.34;
 
+    // Records any data source that didn't complete so the caller can tell
+    // "no water found" apart from "couldn't finish loading" and offer a retry.
+    final incomplete = <String>{};
+    Future<T> guard<T>(String label, Future<T> f, T fallback) async {
+      try {
+        return await f;
+      } catch (_) {
+        incomplete.add(label);
+        return fallback;
+      }
+    }
+
     // Wave 1: every call that only needs the route geometry runs concurrently
-    // instead of one after another. Each is guarded so a single slow/failed
-    // source degrades gracefully rather than failing or blocking the rest.
+    // instead of one after another.
     log('Fetching map data, elevation and conditions…');
     final w1 = await Future.wait<Object?>([
-      _safe(elevations(net, pts, web: web), <int, int>{}),
-      _safe(nhdCrossings(net, pts, cum), <Feature>[]),
-      _safe(overpassFeatures(net, pts, web: web), OsmFeatures([], [])),
-      _safe(forecast(net, pts), null),
-      _safe(nldiDownstream(net, pts), (null, <Map<String, String?>>[])),
-      _safe(nrcsSnowpack(net, pts, whenDate), null),
-      _safe(drought(net, pts), null),
+      guard('elevation', elevations(net, pts, web: web), <int, int>{}),
+      guard('stream crossings', nhdCrossings(net, pts, cum), <Feature>[]),
+      guard('trail names', overpassFeatures(net, pts, web: web), OsmFeatures([], [])),
+      guard('weather', forecast(net, pts), null),
+      guard('receiving stream', nldiDownstream(net, pts), (null, <Map<String, String?>>[])),
+      guard('snowpack', nrcsSnowpack(net, pts, whenDate), null),
+      guard('drought', drought(net, pts), null),
     ]);
     final ele = w1[0] as Map<int, int>;
     final feats = w1[1] as List<Feature>;
@@ -71,8 +82,9 @@ Future<AnalysisResult> analyze(
     // Wave 2: the two calls that depend on wave-1 results, also concurrent.
     final state = wx?.state;
     final w2 = await Future.wait<Object?>([
-      _safe(nrcsForecast(net, pts, state, whenDate), null),
-      _safe(
+      guard('water-supply forecast', nrcsForecast(net, pts, state, whenDate), null),
+      guard(
+          'streamflow gage',
           nldiGages.isNotEmpty
               ? gageSnapshot(net, nldiGages, whenDate)
               : Future<Gage?>.value(null),
@@ -130,6 +142,7 @@ Future<AnalysisResult> analyze(
       features: feats,
       conditions: cond,
       reversedGpx: reversedGpx,
+      incompleteSources: incomplete.toList(),
     );
   } finally {
     net.close();
@@ -138,13 +151,3 @@ Future<AnalysisResult> analyze(
 
 String _ymd(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
-/// Await [f], but never throw: on any error return [fallback]. Lets the parallel
-/// waves treat a slow or unavailable data source as "missing" instead of fatal.
-Future<T> _safe<T>(Future<T> f, T fallback) async {
-  try {
-    return await f;
-  } catch (_) {
-    return fallback;
-  }
-}

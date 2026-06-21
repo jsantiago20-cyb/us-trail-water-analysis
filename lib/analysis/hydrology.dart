@@ -155,7 +155,7 @@ Future<List<Feature>> nhdCrossings(Net net, List<LL> pts, List<double> cum) asyn
     'geometryPrecision': '6',
   };
   final url = '$_nhdUrl?${Uri(queryParameters: params).query}';
-  final j = await net.getJson('nhd', url, timeout: const Duration(seconds: 45));
+  final j = await net.getJson('nhd', url, timeout: const Duration(seconds: 60));
   final feats = (j['features'] as List?) ?? [];
 
   final raw = <_Raw>[];
