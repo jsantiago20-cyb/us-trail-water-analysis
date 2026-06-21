@@ -47,19 +47,29 @@ The build output to upload is the **`build/web`** folder.
    you can rename it. Done.
 - **Cost:** $0. **Account:** Netlify (free).
 
-### Option 2 — GitHub Pages (free, permanent, ties in with your iOS repo)
-GitHub Pages serves from a sub-path, so build with a base href that matches the
-repo name:
-```powershell
-flutter build web --release --base-href "/us-trail-water-analysis/"
-```
-1. Create a GitHub repo `us-trail-water-analysis` and push the project.
-2. Copy everything in `build/web` into a `docs/` folder on the `main` branch (or
-   push it to a `gh-pages` branch).
-3. Repo **Settings → Pages →** Source = `main` / `docs` (or `gh-pages` / root).
-4. Your URL: `https://<you>.github.io/us-trail-water-analysis/`.
-- **Cost:** $0. **Account:** GitHub (free). *(If you already make the GitHub repo
-  for the TestFlight/Codemagic path, this reuses it.)*
+### Option 2 — GitHub Pages (free, permanent, auto-rebuilds) ✅ set up
+This repo already includes `.github/workflows/deploy-web.yml`, which builds the
+Flutter web app and publishes it to Pages on every push to `main`. You never
+commit build files, and the base-href adapts to your repo name automatically.
+The local git repo is already initialized and committed — you just push.
+
+1. Create a **public** empty repo on GitHub (no README), e.g.
+   `us-trail-water-analysis`.
+2. In this folder:
+   ```powershell
+   git remote add origin https://github.com/<you>/us-trail-water-analysis.git
+   git push -u origin main
+   ```
+3. Repo **Settings → Pages → Build and deployment → Source = "GitHub Actions"**.
+4. **Actions** tab → run **Deploy web app to GitHub Pages** (it also runs on each
+   push). When green, your URL is
+   `https://<you>.github.io/us-trail-water-analysis/`.
+- **Cost:** $0. **Account:** GitHub (free). The same repo also drives the
+  iOS/TestFlight build via `codemagic.yaml`.
+
+> Prefer I do it? Install the GitHub CLI (`winget install GitHub.cli`), run
+> `gh auth login` once, and tell me — I'll create the repo, push, enable Pages,
+> and trigger the build for you.
 
 ### Option 3 — Cloudflare Pages or Vercel (free, CLI one-liner)
 ```powershell
