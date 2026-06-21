@@ -230,16 +230,20 @@ class _ResultView extends StatelessWidget {
 
 Color _permColor(String perm) {
   switch (perm) {
-    case 'perennial':
-      return const Color(0xFF1565C0);
-    case 'intermittent':
-      return const Color(0xFF00897B);
-    case 'ephemeral':
-      return const Color(0xFF8D6E63);
+    case 'perennial': // Reliable
+      return const Color(0xFF1565C0); // blue
+    case 'intermittent': // Unreliable
+      return const Color(0xFFF9A825); // yellow
+    case 'ephemeral': // Recent Rain/Snowmelt
+      return const Color(0xFFD32F2F); // red
     default:
       return const Color(0xFF757575);
   }
 }
+
+/// A readable text color for [perm] (the yellow needs darkening on white).
+Color _permTextColor(String perm) =>
+    perm == 'intermittent' ? const Color(0xFFB28704) : _permColor(perm);
 
 class _HeadlineCard extends StatelessWidget {
   final Feature f;
@@ -273,7 +277,7 @@ class _HeadlineCard extends StatelessWidget {
               style: theme.textTheme.bodyLarge,
             ),
             const SizedBox(height: 4),
-            Text('${f.label} (${f.perm})',
+            Text('${f.label} (${permLabel(f.perm)})',
                 style: theme.textTheme.bodyMedium),
           ],
         ),
@@ -310,29 +314,25 @@ class _FeatureTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '${f.trail ?? 'off-trail'} · mi ${f.mileRange}',
-                          style: theme.textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(f.perm,
-                            style: theme.textTheme.labelSmall
-                                ?.copyWith(color: color)),
-                      ),
-                    ],
+                  Text(
+                    '${f.trail ?? 'off-trail'} · mi ${f.mileRange}',
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w600),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(permLabel(f.perm),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                            color: _permTextColor(f.perm),
+                            fontWeight: FontWeight.w600)),
+                  ),
+                  const SizedBox(height: 6),
                   Text(f.label, style: theme.textTheme.bodyMedium),
                   const SizedBox(height: 2),
                   Text(

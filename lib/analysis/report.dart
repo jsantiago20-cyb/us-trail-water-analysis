@@ -24,7 +24,7 @@ String renderMarkdown(AnalysisResult r) {
   for (final f in r.features) {
     final trail = f.trail ?? 'off-trail';
     final stream = f.name ?? '';
-    out.add('| $trail | ${f.mileRange} | ${f.label} | ${f.perm} | '
+    out.add('| $trail | ${f.mileRange} | ${f.label} | ${permLabel(f.perm)} | '
         '${f.elevFt ?? '?'} | ${f.confidence} | $stream |');
   }
 

@@ -1,3 +1,19 @@
+/// Hiker-facing label for an NHD permanence class:
+/// perennial → Reliable, intermittent → Unreliable, ephemeral →
+/// Recent Rain/Snowmelt. Other classes pass through unchanged.
+String permLabel(String perm) {
+  switch (perm) {
+    case 'perennial':
+      return 'Reliable';
+    case 'intermittent':
+      return 'Unreliable';
+    case 'ephemeral':
+      return 'Recent Rain/Snowmelt';
+    default:
+      return perm;
+  }
+}
+
 /// A clustered water source along the route.
 class Feature {
   double mileLo;
